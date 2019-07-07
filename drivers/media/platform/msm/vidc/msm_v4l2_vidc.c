@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -477,7 +477,7 @@ static int msm_vidc_probe(struct platform_device *pdev)
 		mutex_lock(&vidc_driver->lock);
 		vidc_driver->num_cores--;
 		mutex_unlock(&vidc_driver->lock);
-		rc = PTR_ERR(core->device);
+		rc = PTR_ERR(core->device) ?: -EBADHANDLE;
 		if (rc != -EPROBE_DEFER)
 			dprintk(VIDC_ERR, "Failed to create HFI device\n");
 		else
@@ -547,6 +547,35 @@ static const struct of_device_id msm_vidc_dt_match[] = {
 	{}
 };
 
+static int msm_vidc_pm_suspend(struct device *pdev)
+{
+	struct msm_vidc_core *core;
+
+	if (!pdev) {
+		dprintk(VIDC_ERR, "%s invalid device\n", __func__);
+		return -EINVAL;
+	}
+
+	core = (struct msm_vidc_core *)pdev->platform_data;
+	if (!core) {
+		dprintk(VIDC_ERR, "%s invalid core\n", __func__);
+		return -EINVAL;
+	}
+	dprintk(VIDC_INFO, "%s\n", __func__);
+
+	return msm_vidc_suspend(core->id);
+}
+
+static int msm_vidc_pm_resume(struct device *dev)
+{
+	dprintk(VIDC_INFO, "%s\n", __func__);
+	return 0;
+}
+
+static const struct dev_pm_ops msm_vidc_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(msm_vidc_pm_suspend, msm_vidc_pm_resume)
+};
+
 MODULE_DEVICE_TABLE(of, msm_vidc_dt_match);
 
 static struct platform_driver msm_vidc_driver = {
@@ -556,6 +585,7 @@ static struct platform_driver msm_vidc_driver = {
 		.name = "msm_vidc_v4l2",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_vidc_dt_match,
+		.pm = &msm_vidc_pm_ops,
 	},
 };
 
@@ -581,6 +611,8 @@ static int __init msm_vidc_init(void)
 	if (rc) {
 		dprintk(VIDC_ERR,
 			"Failed to register platform driver\n");
+		msm_vidc_debugfs_deinit_drv();
+		debugfs_remove_recursive(vidc_driver->debugfs_root);
 		kfree(vidc_driver);
 		vidc_driver = NULL;
 	}
@@ -591,6 +623,7 @@ static int __init msm_vidc_init(void)
 static void __exit msm_vidc_exit(void)
 {
 	platform_driver_unregister(&msm_vidc_driver);
+	msm_vidc_debugfs_deinit_drv();
 	debugfs_remove_recursive(vidc_driver->debugfs_root);
 	kfree(vidc_driver);
 	vidc_driver = NULL;

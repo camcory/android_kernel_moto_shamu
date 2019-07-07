@@ -99,8 +99,15 @@ static void wcd9xxx_irq_enable(struct irq_data *data)
 	struct wcd9xxx_core_resource *wcd9xxx_res =
 			irq_data_get_irq_chip_data(data);
 	int wcd9xxx_irq = virq_to_phyirq(wcd9xxx_res, data->irq);
-	wcd9xxx_res->irq_masks_cur[BIT_BYTE(wcd9xxx_irq)] &=
-		~(BYTE_BIT_MASK(wcd9xxx_irq));
+	int byte = BIT_BYTE(wcd9xxx_irq);
+	int size = ARRAY_SIZE(wcd9xxx_res->irq_masks_cur);
+	if ((byte < size) && (byte >= 0)) {
+		wcd9xxx_res->irq_masks_cur[byte] &=
+			~(BYTE_BIT_MASK(wcd9xxx_irq));
+	} else {
+		pr_err("%s: Array size is %d but index is %d: Out of range\n",
+			__func__, size, byte);
+	}
 }
 
 static void wcd9xxx_irq_disable(struct irq_data *data)
@@ -108,8 +115,30 @@ static void wcd9xxx_irq_disable(struct irq_data *data)
 	struct wcd9xxx_core_resource *wcd9xxx_res =
 			irq_data_get_irq_chip_data(data);
 	int wcd9xxx_irq = virq_to_phyirq(wcd9xxx_res, data->irq);
-	wcd9xxx_res->irq_masks_cur[BIT_BYTE(wcd9xxx_irq)]
-		|= BYTE_BIT_MASK(wcd9xxx_irq);
+	int byte = BIT_BYTE(wcd9xxx_irq);
+	int size = ARRAY_SIZE(wcd9xxx_res->irq_masks_cur);
+	if ((byte < size) && (byte >= 0)) {
+		wcd9xxx_res->irq_masks_cur[byte]
+			|= BYTE_BIT_MASK(wcd9xxx_irq);
+	} else {
+		pr_err("%s: Array size is %d but index is %d: Out of range\n",
+			__func__, size, byte);
+	}
+}
+
+static void wcd9xxx_irq_ack(struct irq_data *data)
+{
+	int wcd9xxx_irq = 0;
+	struct wcd9xxx_core_resource *wcd9xxx_res =
+			irq_data_get_irq_chip_data(data);
+
+	if (wcd9xxx_res == NULL) {
+		pr_err("%s: wcd9xxx_res is NULL\n", __func__);
+		return;
+	}
+	wcd9xxx_irq = virq_to_phyirq(wcd9xxx_res, data->irq);
+	pr_debug("%s: IRQ_ACK called for WCD9XXX IRQ: %d\n",
+				__func__, wcd9xxx_irq);
 }
 
 static void wcd9xxx_irq_mask(struct irq_data *d)
@@ -124,6 +153,7 @@ static struct irq_chip wcd9xxx_irq_chip = {
 	.irq_disable = wcd9xxx_irq_disable,
 	.irq_enable = wcd9xxx_irq_enable,
 	.irq_mask = wcd9xxx_irq_mask,
+	.irq_ack = wcd9xxx_irq_ack,
 };
 
 bool wcd9xxx_lock_sleep(
@@ -148,6 +178,7 @@ bool wcd9xxx_lock_sleep(
 		pr_debug("%s: holding wake lock\n", __func__);
 		pm_qos_update_request(&wcd9xxx_res->pm_qos_req,
 				      msm_cpuidle_get_deep_idle_latency());
+		pm_stay_awake(wcd9xxx_res->dev);
 	}
 	mutex_unlock(&wcd9xxx_res->pm_lock);
 
@@ -186,6 +217,7 @@ void wcd9xxx_unlock_sleep(
 			wcd9xxx_res->pm_state = WCD9XXX_PM_SLEEPABLE;
 		pm_qos_update_request(&wcd9xxx_res->pm_qos_req,
 				PM_QOS_DEFAULT_VALUE);
+		pm_relax(wcd9xxx_res->dev);
 	}
 	mutex_unlock(&wcd9xxx_res->pm_lock);
 	wake_up_all(&wcd9xxx_res->pm_wq);
@@ -596,6 +628,9 @@ wcd9xxx_get_irq_drv_d(const struct wcd9xxx_core_resource *wcd9xxx_res)
 		return NULL;
 
 	domain = irq_find_host(pnode);
+	if (unlikely(!domain))
+		return NULL;
+
 	return (struct wcd9xxx_irq_drv_data *)domain->host_data;
 }
 
@@ -615,6 +650,10 @@ static int phyirq_to_virq(struct wcd9xxx_core_resource *wcd9xxx_res, int offset)
 static int virq_to_phyirq(struct wcd9xxx_core_resource *wcd9xxx_res, int virq)
 {
 	struct irq_data *irq_data = irq_get_irq_data(virq);
+	if (unlikely(!irq_data)) {
+		pr_err("%s: irq_data is NULL", __func__);
+		return -EINVAL;
+	}
 	return irq_data->hwirq;
 }
 
@@ -664,6 +703,10 @@ static int wcd9xxx_irq_probe(struct platform_device *pdev)
 	} else {
 		dev_dbg(&pdev->dev, "%s: virq = %d\n", __func__, irq);
 		domain = irq_find_host(pdev->dev.of_node);
+		if (unlikely(!domain)) {
+			pr_err("%s: domain is NULL", __func__);
+			return -EINVAL;
+		}
 		data = (struct wcd9xxx_irq_drv_data *)domain->host_data;
 		data->irq = irq;
 		wmb();
@@ -679,6 +722,10 @@ static int wcd9xxx_irq_remove(struct platform_device *pdev)
 	struct wcd9xxx_irq_drv_data *data;
 
 	domain = irq_find_host(pdev->dev.of_node);
+	if (unlikely(!domain)) {
+		pr_err("%s: domain is NULL", __func__);
+		return -EINVAL;
+	}
 	data = (struct wcd9xxx_irq_drv_data *)domain->host_data;
 	data->irq = 0;
 	wmb();

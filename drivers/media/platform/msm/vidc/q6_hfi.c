@@ -1183,14 +1183,6 @@ static int q6_hfi_session_get_property(void *sess,
 	return 0;
 }
 
-static int q6_hfi_unset_ocmem(void *dev)
-{
-	(void)dev;
-
-	/* Q6 does not support ocmem */
-	return -EINVAL;
-}
-
 static int q6_hfi_iommu_get_domain_partition(void *dev, u32 flags,
 	u32 buffer_type, int *domain, int *partition)
 {
@@ -1223,7 +1215,7 @@ static int q6_hfi_iommu_attach(struct q6_hfi_device *device)
 		if (IS_ERR_OR_NULL(domain)) {
 			dprintk(VIDC_ERR, "Failed to get domain: %s\n",
 					iommu_map->name);
-			rc = IS_ERR(domain) ? PTR_ERR(domain) : -EINVAL;
+			rc = PTR_ERR(domain) ?: -EINVAL;
 			break;
 		}
 		dprintk(VIDC_DBG, "Attaching domain(id:%d) %pK to group %pK\n",
@@ -1371,7 +1363,6 @@ static void q6_init_hfi_callbacks(struct hfi_device *hdev)
 	hdev->session_flush = q6_hfi_session_flush;
 	hdev->session_set_property = q6_hfi_session_set_property;
 	hdev->session_get_property = q6_hfi_session_get_property;
-	hdev->unset_ocmem = q6_hfi_unset_ocmem;
 	hdev->iommu_get_domain_partition = q6_hfi_iommu_get_domain_partition;
 	hdev->load_fw = q6_hfi_load_fw;
 	hdev->unload_fw = q6_hfi_unload_fw;
@@ -1394,8 +1385,7 @@ int q6_hfi_initialize(struct hfi_device *hdev, u32 device_id,
 	hdev->hfi_device_data = q6_hfi_get_device(device_id, res, callback);
 
 	if (IS_ERR_OR_NULL(hdev->hfi_device_data)) {
-		rc = PTR_ERR(hdev->hfi_device_data);
-		rc = !rc ? -EINVAL : rc;
+		rc = PTR_ERR(hdev->hfi_device_data) ?: -EINVAL;
 		goto err_hfi_init;
 	}
 

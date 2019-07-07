@@ -1,4 +1,5 @@
 # UAPI Header export list
+header-y += android/
 header-y += byteorder/
 header-y += can/
 header-y += caif/
@@ -304,6 +305,7 @@ header-y += ncp_no.h
 header-y += neighbour.h
 header-y += net.h
 header-y += net_dropmon.h
+header-y += net_map.h
 header-y += net_tstamp.h
 header-y += netconf.h
 header-y += netdevice.h

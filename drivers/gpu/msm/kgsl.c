@@ -1168,6 +1168,9 @@ kgsl_sharedmem_find_region(struct kgsl_process_private *private,
 {
 	struct rb_node *node;
 
+	if (!private)
+		return NULL;
+
 	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr))
 		return NULL;
 
@@ -2609,11 +2612,14 @@ static int check_vma(struct vm_area_struct *vma, struct file *vmfile,
 
 static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, struct file *vmfile)
 {
-	int i, ret = 0;
-	long npages = 0;
+	int ret = 0;
+	long npages = 0, i;
 	unsigned long sglen = memdesc->size / PAGE_SIZE;
 	struct page **pages = NULL;
 	int write = ((memdesc->flags & KGSL_MEMFLAGS_GPUREADONLY) ? 0 : 1);
+
+	if (sglen == 0 || sglen >= LONG_MAX)
+		return -EINVAL;
 
 	pages = kgsl_malloc(sglen * sizeof(struct page *));
 	if (pages == NULL)
@@ -2644,7 +2650,7 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, struct file *vmfile)
 	if (ret)
 		goto out;
 
-	if (npages != sglen) {
+	if ((unsigned long) npages != sglen) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -3130,8 +3136,9 @@ long kgsl_ioctl_gpumem_sync_cache(struct kgsl_device_private *dev_priv,
 static int mem_id_cmp(const void *_a, const void *_b)
 {
 	const unsigned int *a = _a, *b = _b;
-	int cmp = a - b;
-	return (cmp < 0) ? -1 : (cmp > 0);
+	if (*a == *b)
+		return 0;
+	return (*a > *b) ? 1 : -1;
 }
 
 long kgsl_ioctl_gpumem_sync_cache_bulk(struct kgsl_device_private *dev_priv,
@@ -3166,7 +3173,7 @@ long kgsl_ioctl_gpumem_sync_cache_bulk(struct kgsl_device_private *dev_priv,
 		goto end;
 	}
 	/* sort the ids so we can weed out duplicates */
-	sort(id_list, param->count, sizeof(int), mem_id_cmp, NULL);
+	sort(id_list, param->count, sizeof(*id_list), mem_id_cmp, NULL);
 
 	for (i = 0; i < param->count; i++) {
 		unsigned int cachemode;
@@ -3268,6 +3275,9 @@ static int kgsl_filter_cachemode(unsigned int flags)
 }
 #endif
 
+/* The largest allowable alignment for a GPU object is 32MB */
+#define KGSL_MAX_ALIGN (32 * SZ_1M)
+
 /*
  * The common parts of kgsl_ioctl_gpumem_alloc and kgsl_ioctl_gpumem_alloc_id.
  */
@@ -3294,11 +3304,13 @@ _gpumem_alloc(struct kgsl_device_private *dev_priv,
 	/* Cap the alignment bits to the highest number we can handle */
 
 	align = (flags & KGSL_MEMALIGN_MASK) >> KGSL_MEMALIGN_SHIFT;
-	if (align >= 32) {
-		KGSL_CORE_ERR("Alignment too big, restricting to 2^31\n");
+	if (align >= ilog2(KGSL_MAX_ALIGN)) {
+		KGSL_CORE_ERR("Alignment too large; restricting to %dK\n",
+			KGSL_MAX_ALIGN >> 10);
 
 		flags &= ~KGSL_MEMALIGN_MASK;
-		flags |= (31 << KGSL_MEMALIGN_SHIFT) & KGSL_MEMALIGN_MASK;
+		flags |= (ilog2(KGSL_MAX_ALIGN) << KGSL_MEMALIGN_SHIFT) &
+			KGSL_MEMALIGN_MASK;
 	}
 
 	flags = kgsl_filter_cachemode(flags);
@@ -3558,7 +3570,7 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
 	kgsl_ioctl_func_t func;
 	int ret;
 	char ustack[64];
-	void *uptr = NULL;
+	void *uptr = ustack;
 
 	BUG_ON(dev_priv == NULL);
 
@@ -3567,10 +3579,8 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
 
 	nr = _IOC_NR(cmd);
 
-	if (cmd & (IOC_IN | IOC_OUT)) {
-		if (_IOC_SIZE(cmd) < sizeof(ustack))
-			uptr = ustack;
-		else {
+	if (cmd & IOC_INOUT) {
+		if (_IOC_SIZE(cmd) > sizeof(ustack)) {
 			uptr = kzalloc(_IOC_SIZE(cmd), GFP_KERNEL);
 			if (uptr == NULL) {
 				KGSL_MEM_ERR(dev_priv->device,
@@ -3633,7 +3643,7 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd,
 	}
 
 done:
-	if (_IOC_SIZE(cmd) >= sizeof(ustack))
+	if ((cmd & IOC_INOUT) && (uptr != ustack))
 		kfree(uptr);
 
 	return ret;

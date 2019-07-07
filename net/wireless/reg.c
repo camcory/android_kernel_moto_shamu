@@ -1581,8 +1581,8 @@ static void reg_process_hint(struct regulatory_request *reg_request,
 		break;
 	default:
 		if (reg_initiator == NL80211_REGDOM_SET_BY_USER)
-			schedule_delayed_work(&reg_timeout,
-					      msecs_to_jiffies(3142));
+			queue_delayed_work(system_power_efficient_wq,
+					   &reg_timeout, msecs_to_jiffies(3142));
 		break;
 	}
 }
@@ -1689,6 +1689,7 @@ static int regulatory_hint_core(const char *alpha2)
 	request->alpha2[0] = alpha2[0];
 	request->alpha2[1] = alpha2[1];
 	request->initiator = NL80211_REGDOM_SET_BY_CORE;
+	request->wiphy_idx = WIPHY_IDX_INVALID;
 
 	queue_regulatory_request(request);
 
@@ -2184,7 +2185,8 @@ static int __set_regdom(const struct ieee80211_regdomain *rd)
 	if (!request_wiphy &&
 	    (lr->initiator == NL80211_REGDOM_SET_BY_DRIVER ||
 	     lr->initiator == NL80211_REGDOM_SET_BY_COUNTRY_IE)) {
-		schedule_delayed_work(&reg_timeout, 0);
+		queue_delayed_work(system_power_efficient_wq,
+				   &reg_timeout, 0);
 		return -ENODEV;
 	}
 

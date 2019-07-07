@@ -55,7 +55,7 @@ static struct list_head sel_netif_hash[SEL_NETIF_HASH_SIZE];
  */
 static inline u32 sel_netif_hashfn(const struct net *ns, int ifindex)
 {
-	return ((uintptr_t)ns + ifindex) & (SEL_NETIF_HASH_SIZE - 1);
+	return (((uintptr_t)ns + ifindex) & (SEL_NETIF_HASH_SIZE - 1));
 }
 
 /**
@@ -275,7 +275,7 @@ static struct notifier_block sel_netif_netdev_notifier = {
 
 static __init int sel_netif_init(void)
 {
-	int i, err;
+	int i;
 
 	if (!selinux_enabled)
 		return 0;
@@ -285,7 +285,7 @@ static __init int sel_netif_init(void)
 
 	register_netdevice_notifier(&sel_netif_netdev_notifier);
 
-	return err;
+	return 0;
 }
 
 __initcall(sel_netif_init);

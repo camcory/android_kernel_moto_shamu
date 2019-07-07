@@ -1235,6 +1235,13 @@ static int wcd9xxx_i2c_probe(struct i2c_client *client,
 			dev_dbg(&client->dev, "%s:Platform data\n"
 				"from device tree\n", __func__);
 			pdata = wcd9xxx_populate_dt_pdata(&client->dev);
+			if (!pdata) {
+				dev_err(&client->dev,
+					"%s: Fail to obtain pdata from device tree\n",
+					 __func__);
+				ret = -EINVAL;
+				goto fail;
+			}
 			client->dev.platform_data = pdata;
 		} else {
 			dev_dbg(&client->dev, "%s:Platform data from\n"
@@ -1726,6 +1733,14 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 	if (slim->dev.of_node) {
 		dev_info(&slim->dev, "Platform data from device tree\n");
 		pdata = wcd9xxx_populate_dt_pdata(&slim->dev);
+		if (!pdata) {
+			dev_err(&slim->dev,
+				"%s: Fail to obtain pdata from device tree\n",
+				__func__);
+			ret = -EINVAL;
+			goto err;
+		}
+
 		ret = wcd9xxx_dt_parse_slim_interface_dev_info(&slim->dev,
 				&pdata->slimbus_slave_device);
 		if (ret) {
@@ -1830,11 +1845,11 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 		("wcd9310_slimbus_interface_device", 0);
 	if (!IS_ERR(debugfs_wcd9xxx_dent)) {
 		debugfs_peek = debugfs_create_file("peek",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "peek", &codec_debug_ops);
 
 		debugfs_poke = debugfs_create_file("poke",
-		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		S_IFREG | S_IRUSR, debugfs_wcd9xxx_dent,
 		(void *) "poke", &codec_debug_ops);
 	}
 #endif
@@ -1926,7 +1941,6 @@ static int wcd9xxx_slim_device_down(struct slim_device *sldev)
 {
 	struct wcd9xxx *wcd9xxx = slim_get_devicedata(sldev);
 
-	dev_info(wcd9xxx->dev, "%s: device down\n", __func__);
 	if (!wcd9xxx) {
 		pr_err("%s: wcd9xxx is NULL\n", __func__);
 		return -EINVAL;
@@ -1941,12 +1955,14 @@ static int wcd9xxx_slim_device_down(struct slim_device *sldev)
 static int wcd9xxx_slim_resume(struct slim_device *sldev)
 {
 	struct wcd9xxx *wcd9xxx = slim_get_devicedata(sldev);
+
 	return wcd9xxx_core_res_resume(&wcd9xxx->core_res);
 }
 
-static int wcd9xxx_i2c_resume(struct i2c_client *i2cdev)
+static int wcd9xxx_i2c_resume(struct device *dev)
 {
-	struct wcd9xxx *wcd9xxx = dev_get_drvdata(&i2cdev->dev);
+	struct wcd9xxx *wcd9xxx = dev_get_drvdata(dev);
+
 	if (wcd9xxx)
 		return wcd9xxx_core_res_resume(&wcd9xxx->core_res);
 	else
@@ -1956,12 +1972,15 @@ static int wcd9xxx_i2c_resume(struct i2c_client *i2cdev)
 static int wcd9xxx_slim_suspend(struct slim_device *sldev, pm_message_t pmesg)
 {
 	struct wcd9xxx *wcd9xxx = slim_get_devicedata(sldev);
+
 	return wcd9xxx_core_res_suspend(&wcd9xxx->core_res, pmesg);
 }
 
-static int wcd9xxx_i2c_suspend(struct i2c_client *i2cdev, pm_message_t pmesg)
+static int wcd9xxx_i2c_suspend(struct device *dev)
 {
-	struct wcd9xxx *wcd9xxx = dev_get_drvdata(&i2cdev->dev);
+	struct wcd9xxx *wcd9xxx = dev_get_drvdata(dev);
+	pm_message_t pmesg = {0};
+
 	if (wcd9xxx)
 		return wcd9xxx_core_res_suspend(&wcd9xxx->core_res, pmesg);
 	else
@@ -2111,28 +2130,31 @@ static struct i2c_device_id tabla_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tabla_id_table);
 
+static const struct dev_pm_ops wcd9xxx_i2c_pm_ops = {
+	.suspend = wcd9xxx_i2c_suspend,
+	.resume	= wcd9xxx_i2c_resume,
+};
+
 static struct i2c_driver tabla_i2c_driver = {
 	.driver                 = {
 		.owner          =       THIS_MODULE,
 		.name           =       "tabla-i2c-core",
+		.pm		=	&wcd9xxx_i2c_pm_ops,
 	},
 	.id_table               =       tabla_id_table,
 	.probe                  =       wcd9xxx_i2c_probe,
 	.remove                 =       wcd9xxx_i2c_remove,
-	.resume	= wcd9xxx_i2c_resume,
-	.suspend = wcd9xxx_i2c_suspend,
 };
 
 static struct i2c_driver wcd9xxx_i2c_driver = {
 	.driver                 = {
 		.owner          =       THIS_MODULE,
 		.name           =       "wcd9xxx-i2c-core",
+		.pm		=	&wcd9xxx_i2c_pm_ops,
 	},
 	.id_table               =       wcd9xxx_id_table,
 	.probe                  =       wcd9xxx_i2c_probe,
 	.remove                 =       wcd9xxx_i2c_remove,
-	.resume	= wcd9xxx_i2c_resume,
-	.suspend = wcd9xxx_i2c_suspend,
 };
 
 

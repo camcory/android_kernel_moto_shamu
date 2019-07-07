@@ -168,6 +168,14 @@
 			reg = <0 0 0 0xfc00000>;
 			label = "secure_mem";
 		};
+
+		peripheral_mem: peripheral_region@0xdb00000 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x0db00000 0x0 0x1d00000>;
+			label = "peripheral_mem";
+		};
         };
 };
 
@@ -320,7 +328,7 @@
 
 		qcom,tx-gpio = <&msmgpio 130 0>;
 		qcom,rx-gpio = <&msmgpio 131 0>;
-		qcom,inject-rx-on-wakeup = <1>;
+		qcom,inject-rx-on-wakeup;
 		qcom,rx-char-to-inject = <0x18>;
 
 		qcom,wakeup_irq = <2>;
@@ -549,7 +557,7 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <8>;
-		qcom,cpu-dma-latency-us = <200>;
+		qcom,cpu-dma-latency-us = <701>;
 
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <9>;
@@ -607,6 +615,7 @@
 		interrupt-names = "hc_irq", "pwr_irq";
 
 		qcom,bus-width = <4>;
+		qcom,cpu-dma-latency-us = <701>;
 
 		qcom,msm-bus,name = "sdhc2";
 		qcom,msm-bus,num-cases = <8>;
@@ -807,28 +816,6 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <1>;
 		qcom,ce-device = <0>;
-		qcom,clk-mgmt-sus-res;
-                qcom,msm-bus,name = "qcrypto-noc";
-		qcom,msm-bus,num-cases = <2>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,use-sw-aes-cbc-ecb-ctr-algo;
-		qcom,use-sw-aes-xts-algo;
-		qcom,use-sw-ahash-algo;
-		qcom,msm-bus,vectors-KBps =
-				<56 512 0 0>,
-				<56 512 3936000 393600>;
-	};
-
-	qcom,qcrypto1@fd440000 {
-		status = "disabled";
-		compatible = "qcom,qcrypto";
-		reg = <0xfd440000 0x20000>,
-		      <0xfd444000 0x1b000>;
-		reg-names = "crypto-base","crypto-bam-base";
-		interrupts = <0 236 0>;
-		qcom,bam-pipe-pair = <0>;
-		qcom,ce-hw-instance = <1>;
-		qcom,ce-device = <1>;
 		qcom,clk-mgmt-sus-res;
                 qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
@@ -4455,6 +4442,7 @@
 			interrupts = <0 131 0>, <0 179 0>;
 			interrupt-names = "irq", "otg_irq";
 			tx-fifo-resize;
+			snps,usb3-u1u2-disable;
 			usb-phy = <&hsphy0>, <&ssphy0>;
 		};
 	};
@@ -4639,8 +4627,8 @@
 			qcom,smd-edge = <1>;
 			qcom,smd-irq-offset = <0x8>;
 			qcom,smd-irq-bitmask = <0x100>;
-			qcom,pil-string = "adsp";
 			interrupts = <0 156 1>;
+			label = "adsp";
 		};
 
 		qcom,smsm-adsp {
@@ -4657,7 +4645,9 @@
 			qcom,smd-irq-offset = <0x8>;
 			qcom,smd-irq-bitmask = <0x1>;
 			interrupts = <0 168 1>;
+			label = "rpm";
 			qcom,irq-no-suspend;
+			qcom,not-loadable;
 		};
 	};
 
@@ -4680,7 +4670,7 @@
 				<63 512 0 304000>;
 
 		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <2000>;
+		qcom,proxy-timeout-ms = <5000>;
 		qcom,firmware-name = "venus";
 	};
 
@@ -4921,8 +4911,6 @@
 		qcom,cx-phase-resource-key = "tmpc";
 		qcom,cx-phase-hot-crit-temp = <85>;
 		qcom,cx-phase-hot-crit-temp-hyst = <15>;
-		qcom,gfx-phase-warm-temp = <60>;
-		qcom,gfx-phase-warm-temp-hyst = <10>;
 		qcom,gfx-phase-hot-crit-temp = <85>;
 		qcom,gfx-phase-hot-crit-temp-hyst = <15>;
 		qcom,gfx-sensor-id = <4>;
@@ -4964,6 +4952,7 @@
 		venus-core1-supply = <&gdsc_venus_core1>;
 		qcom,clock-names= "core_clk", "core0_clk", "core1_clk", "iface_clk", "bus_clk", "mem_clk";
 		qcom,clock-configs = <0x3 0x0 0x0 0x0 0x0 0x0>;
+		qcom,sw-power-collapse;
 		qcom,load-freq-tbl = <979200 465000000>,
 			<783360 465000000>,
 			<489600 266670000>,
@@ -5008,14 +4997,16 @@
 		qcom,msm-bus-clients {
 			qcom,msm-bus-client@0 {
 				qcom,msm-bus,name = "venc-ddr";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 120000 302000>,
-					<63 512 364000 302000>,
-					<63 512 804000 302000>,
-					<63 512 1608000 604000>,
+					<63 512 120000 302000>, /* VGA 30 fps */
+					<63 512 364000 302000>, /* VGA 60 fps */
+					<63 512 364000 302000>, /* 720p 30 fps */
+					<63 512 804000 302000>, /* 720p 60 fps */
+					<63 512 804000 302000>, /* 1080p 30 fps */
+					<63 512 1608000 604000>, /* 1080p 60 fps */
 					<63 512 2576000 967000>,
 					<63 512 4680000 1404000>,
 					<63 512 4988000 1496000>;
@@ -5024,14 +5015,16 @@
 
 			qcom,msm-bus-client@1 {
 				qcom,msm-bus,name = "vdec-core0-ddr";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 208000 303000>,
-					<63 512 536000 303000>,
-					<63 512 1012000 303000>,
-					<63 512 2024000 606000>,
+					<63 512 208000 303000>, /* VGA 30 fps */
+					<63 512 536000 303000>, /* VGA 60 fps */
+					<63 512 536000 303000>, /* 720p 30 fps */
+					<63 512 1012000 303000>, /* 720p 60 fps */
+					<63 512 1012000 303000>, /* 1080p 30 fps */
+					<63 512 2024000 606000>, /* 1080p 60 fps */
 					<63 512 3240000 970000>,
 					<63 512 4048000 1212000>,
 					<63 512 4264000 1279000>;
@@ -5040,14 +5033,16 @@
 
 			qcom,msm-bus-client@2 {
 				qcom,msm-bus,name = "vdec-core1-ddr";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<63 512 0 0>,
-					<63 512 208000 303000>,
-					<63 512 536000 303000>,
-					<63 512 1012000 303000>,
-					<63 512 2024000 606000>,
+					<63 512 208000 303000>, /* VGA 30 fps */
+					<63 512 536000 303000>, /* VGA 60 fps */
+					<63 512 536000 303000>, /* 720p 30 fps */
+					<63 512 1012000 303000>, /* 720p 60 fps */
+					<63 512 1012000 303000>, /* 1080p 30 fps */
+					<63 512 2024000 606000>, /* 1080p 60 fps */
 					<63 512 3240000 970000>,
 					<63 512 4048000 1212000>,
 					<63 512 4264000 1279000>;
@@ -5056,14 +5051,16 @@
 
 			qcom,msm-bus-client@3 {
 				qcom,msm-bus,name = "venc-ocmem";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 138000 1034000>,
-					<68 604 414000 1034000>,
-					<68 604 940000 1034000>,
-					<68 604 1880000 2068000>,
+					<68 604 138000 1034000>, /* VGA 30 fps */
+					<68 604 414000 1034000>, /* VGA 60 fps */
+					<68 604 414000 1034000>, /* 720p 30 fps */
+					<68 604 940000 1034000>, /* 720p 60 fps */
+					<68 604 940000 1034000>, /* 1080p 30 fps */
+					<68 604 1880000 2068000>, /* 1080p 60 fps */
 					<68 604 3008000 3309000>,
 					<68 604 3760000 4136000>,
 					<68 604 4468000 2457000>;
@@ -5072,14 +5069,16 @@
 
 			qcom,msm-bus-client@4 {
 				qcom,msm-bus,name = "vdec-core0-ocmem";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 176000 519000>,
-					<68 604 456000 519000>,
-					<68 604 864000 519000>,
-					<68 604 1728000 1038000>,
+					<68 604 176000 519000>, /* VGA 30 fps */
+					<68 604 456000 519000>, /* VGA 60 fps */
+					<68 604 456000 519000>, /* 720p 30 fps */
+					<68 604 864000 519000>, /* 720p 60 fps */
+					<68 604 864000 519000>, /* 1080p 30 fps */
+					<68 604 1728000 1038000>, /* 1080p 60 fps */
 					<68 604 2766000 1661000>,
 					<68 604 3456000 2076000>,
 					<68 604 3662000 2198000>;
@@ -5088,14 +5087,16 @@
 
 			qcom,msm-bus-client@5 {
 				qcom,msm-bus,name = "vdec-core1-ocmem";
-				qcom,msm-bus,num-cases = <8>;
+				qcom,msm-bus,num-cases = <10>;
 				qcom,msm-bus,num-paths = <1>;
 				qcom,msm-bus,vectors-KBps =
 					<68 604 0 0>,
-					<68 604 176000 519000>,
-					<68 604 456000 519000>,
-					<68 604 864000 519000>,
-					<68 604 1728000 3640000>,
+					<68 604 176000 519000>, /* VGA 30 fps */
+					<68 604 456000 519000>, /* VGA 60 fps */
+					<68 604 456000 519000>, /* 720p 30 fps */
+					<68 604 864000 519000>, /* 720p 60 fps */
+					<68 604 864000 519000>, /* 1080p 30 fps */
+					<68 604 1728000 3640000>, /* 1080p 60 fps */
 					<68 604 2766000 3640000>,
 					<68 604 3456000 3640000>,
 					<68 604 3662000 3640000>;
